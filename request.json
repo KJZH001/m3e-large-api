@@ -1,0 +1,4 @@
+{
+  "input": ["这是一段要转换为向量的文本"],
+  "model": "your-model-name"
+}

@@ -1,12 +1,3 @@
-# 当前路径加入系统变量 ------------------------------------
-import os
-import sys
-root_path = os.getcwd()
-print(root_path)
-sys.path.append(root_path)
-# -----------------------------------------------------
-
-
 from fastapi import FastAPI, Depends, HTTPException, status,Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sentence_transformers import SentenceTransformer
@@ -19,7 +10,7 @@ from scipy.interpolate import interp1d
 from typing import List, Literal, Optional, Union,Dict
 from sklearn.preprocessing import PolynomialFeatures
 import torch
-#import os
+import os
 import time
 import argparse
 
