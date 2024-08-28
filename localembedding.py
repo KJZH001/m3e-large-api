@@ -1,3 +1,12 @@
+# 当前路径加入系统变量 ------------------------------------
+import os
+import sys
+root_path = os.getcwd()
+print(root_path)
+sys.path.append(root_path)
+# -----------------------------------------------------
+
+
 from fastapi import FastAPI, Depends, HTTPException, status,Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sentence_transformers import SentenceTransformer
@@ -10,12 +19,24 @@ from scipy.interpolate import interp1d
 from typing import List, Literal, Optional, Union,Dict
 from sklearn.preprocessing import PolynomialFeatures
 import torch
-import os
+#import os
 import time
+import argparse
 
 
 #环境变量传入
 sk_key = os.environ.get('sk-key', 'sk-aaabbbcccdddeeefffggghhhiiijjjkkk')
+
+# Set LLM path via command-line arguments
+parser = argparse.ArgumentParser(description="Set model paths.")
+parser.add_argument('--model_path', type=str, default=r'C:\Users\Administrator\Moe-LLM-Flow\moka-ai_m3e-large', help='Path to the Embedding model')
+args = parser.parse_args()
+
+MODEL_PATH = args.model_path
+
+print("======== Model and Tokenizer Paths ========")
+print(f"Model Path: {MODEL_PATH}")
+print("===========================================")
 
 # 创建一个FastAPI实例
 app = FastAPI()
@@ -32,7 +53,8 @@ if torch.cuda.is_available():
     print('本次加载模型的设备为GPU: ', torch.cuda.get_device_name(0))
 else:
     print('本次加载模型的设备为CPU.')
-model = SentenceTransformer('./moka-ai_m3e-large',device=device) 
+# model = SentenceTransformer('./moka-ai_m3e-large',device=device) 
+model = SentenceTransformer(MODEL_PATH,device=device) 
 
 # 创建一个HTTPBearer实例
 security = HTTPBearer()
@@ -175,6 +197,5 @@ async def get_embeddings(http_request: Request, request: EmbeddingRequest, crede
     return response
 
 if __name__ == "__main__":
- # 预加载模型
-
+    # 预加载模型
     uvicorn.run("localembedding:app", host='0.0.0.0', port=6008, workers=1)
