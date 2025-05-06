@@ -12,35 +12,53 @@ from sklearn.preprocessing import PolynomialFeatures
 import torch
 import os
 
-# 配置日志格式，添加时间戳
+# 配置日志格式，添加时间戳，并持久化
 import logging
 from datetime import datetime, timedelta
+from logging.handlers import TimedRotatingFileHandler
+import os
+
+# 创建日志目录
+log_dir = "/app/log"
+os.makedirs(log_dir, exist_ok=True)
 
 class UTC8Formatter(logging.Formatter):
-    converter = datetime.utcfromtimestamp  # 保证拿到的是 UTC 时间
+    converter = datetime.utcfromtimestamp
 
     def formatTime(self, record, datefmt=None):
-        ct = self.converter(record.created) + timedelta(hours=8)  # UTC + 8
+        ct = self.converter(record.created) + timedelta(hours=8)
         if datefmt:
-            s = ct.strftime(datefmt)
+            return ct.strftime(datefmt)
         else:
-            s = ct.isoformat(timespec='seconds')
-        return s
+            return ct.isoformat(timespec='seconds')
 
-# 设置格式器
 formatter = UTC8Formatter(
     fmt="%(asctime)s - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
-# 应用到全局日志和 uvicorn 日志
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
-    logger = logging.getLogger(name)
+# 控制台日志 handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+
+# 文件日志 handler：每天轮转一次，保留7天，日志文件名为 /app/log/YYYY-MM-DD.log
+file_handler = TimedRotatingFileHandler(
+    filename=os.path.join(log_dir, datetime.utcnow().strftime("%Y-%m-%d") + ".log"),
+    when="midnight",
+    interval=1,
+    backupCount=7,
+    encoding='utf-8',
+    delay=True,
+    utc=True  # 保证切换点是 UTC 的 00:00，加8小时后是北京时间 08:00
+)
+file_handler.setFormatter(formatter)
+
+# 清空并重新绑定 uvicorn 日志
+for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    logger = logging.getLogger(logger_name)
     logger.handlers.clear()
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
     logger.setLevel(logging.INFO)
 
 
