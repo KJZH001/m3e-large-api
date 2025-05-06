@@ -1,37 +1,16 @@
-# 为日志加入时间戳
-import logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-)
-
-for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
-    logger = logging.getLogger(name)
-    logger.handlers.clear()
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s',
-                                  datefmt='%Y-%m-%d %H:%M:%S')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-
-
-from fastapi import FastAPI, Depends, HTTPException, status,Request
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sentence_transformers import SentenceTransformer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import tiktoken
 import numpy as np
 from scipy.interpolate import interp1d
-from typing import List, Literal, Optional, Union,Dict
+from typing import List
 from sklearn.preprocessing import PolynomialFeatures
 import torch
 import os
-import time
-
 
 #环境变量传入
 sk_key = os.environ.get('sk-key', 'sk-aaabbbcccdddeeefffggghhhiiijjjkkk')
@@ -46,52 +25,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 创建一个HTTPBearer实例
+security = HTTPBearer()
+
+# 预加载模型
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') # 检测是否有GPU可用，如果有则使用cuda设备，否则使用cpu设备
 if torch.cuda.is_available():
     print('本次加载模型的设备为GPU: ', torch.cuda.get_device_name(0))
 else:
     print('本次加载模型的设备为CPU.')
 model = SentenceTransformer('./moka-ai_m3e-large',device=device) 
-
-# 创建一个HTTPBearer实例
-security = HTTPBearer()
-
-
-
-class ChatMessage(BaseModel):
-    role: Literal["user", "assistant", "system"]
-    content: str
-
-
-class DeltaMessage(BaseModel):
-    role: Optional[Literal["user", "assistant", "system"]] = None
-    content: Optional[str] = None
-
-class ChatCompletionRequest(BaseModel):
-    model: str
-    messages: List[ChatMessage]
-    temperature: Optional[float] = None
-    top_p: Optional[float] = None
-    max_length: Optional[int] = None
-    stream: Optional[bool] = False
-
-
-class ChatCompletionResponseChoice(BaseModel):
-    index: int
-    message: ChatMessage
-    finish_reason: Literal["stop", "length"]
-
-
-class ChatCompletionResponseStreamChoice(BaseModel):
-    index: int
-    delta: DeltaMessage
-    finish_reason: Optional[Literal["stop", "length"]]
-
-class ChatCompletionResponse(BaseModel):
-    model: str
-    object: Literal["chat.completion", "chat.completion.chunk"]
-    choices: List[Union[ChatCompletionResponseChoice, ChatCompletionResponseStreamChoice]]
-    created: Optional[int] = Field(default_factory=lambda: int(time.time()))
 
 class EmbeddingRequest(BaseModel):
     input: List[str]
@@ -128,27 +72,8 @@ def expand_features(embedding, target_length):
         expanded_embedding = np.pad(expanded_embedding, (0, target_length - len(expanded_embedding)))
     return expanded_embedding
 
-@app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
-async def create_chat_completion(request: ChatCompletionRequest, credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if credentials.credentials != sk_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization code",
-        )
-    choice_data = ChatCompletionResponseChoice(
-        index=0,
-        message=ChatMessage(role="assistant", content='你说得对，但这个是向量模型不能对话'),
-        finish_reason="stop"
-    )
-
-    return ChatCompletionResponse(model=request.model, choices=[choice_data], object="chat.completion")
-
 @app.post("/v1/embeddings", response_model=EmbeddingResponse)
-async def get_embeddings(http_request: Request, request: EmbeddingRequest, credentials: HTTPAuthorizationCredentials = Depends(security)):
-    client_host = http_request.client.host
-    headers = http_request.headers
-    print(f"Client IP: {client_host}")
-    print(f"Request headers: {headers}")
+async def get_embeddings(request: EmbeddingRequest, credentials: HTTPAuthorizationCredentials = Depends(security)):
     
     if credentials.credentials != sk_key:
         raise HTTPException(
@@ -158,7 +83,6 @@ async def get_embeddings(http_request: Request, request: EmbeddingRequest, crede
     
     # 计算嵌入向量和tokens数量 
     embeddings = [model.encode(text) for text in request.input]
-    
 
     # 如果嵌入向量的维度不为1536，则使用插值法扩展至1536维度 
     # embeddings = [interpolate_vector(embedding, 1536) if len(embedding) < 1536 else embedding for embedding in embeddings]
@@ -194,6 +118,4 @@ async def get_embeddings(http_request: Request, request: EmbeddingRequest, crede
     return response
 
 if __name__ == "__main__":
- # 预加载模型
-
-    uvicorn.run("localembedding:app", host='0.0.0.0', port=6008, workers=1)
+ uvicorn.run("localembedding:app", host='0.0.0.0', port=6008, workers=1)
