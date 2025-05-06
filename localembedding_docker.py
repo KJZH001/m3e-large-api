@@ -12,24 +12,34 @@ from sklearn.preprocessing import PolynomialFeatures
 import torch
 import os
 
-import logging
-
 # 配置日志格式，添加时间戳
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
+import logging
+from datetime import datetime, timedelta
+
+class UTC8Formatter(logging.Formatter):
+    converter = datetime.utcfromtimestamp  # 保证拿到的是 UTC 时间
+
+    def formatTime(self, record, datefmt=None):
+        ct = self.converter(record.created) + timedelta(hours=8)  # UTC + 8
+        if datefmt:
+            s = ct.strftime(datefmt)
+        else:
+            s = ct.isoformat(timespec='seconds')
+        return s
+
+# 设置格式器
+formatter = UTC8Formatter(
+    fmt="%(asctime)s - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
-# 对 Uvicorn 日志器进行配置
-for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
-    logger = logging.getLogger(logger_name)
+# 应用到全局日志和 uvicorn 日志
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    logger = logging.getLogger(name)
     logger.handlers.clear()
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter(
-        fmt="%(asctime)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    ))
+    handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
 
